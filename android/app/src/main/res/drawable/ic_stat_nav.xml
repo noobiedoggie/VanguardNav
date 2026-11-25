@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Icône de notification : flèche de navigation blanche sur fond transparent -->
+<!-- Icône de notification : le « V » et la flèche du logo, en silhouette blanche -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <path
+        android:pathData="M282,290L512,790L742,290"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="110"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M12,2.5L19.5,21L12,16.8L4.5,21Z" />
+        android:pathData="M512,170L620,420L512,370L404,420Z" />
 </vector>

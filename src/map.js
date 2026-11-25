@@ -4,7 +4,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { CONFIG, OSM_RASTER_STYLE } from './config.js';
 import { haversine } from './geo.js';
-import { nightStyle, satelliteStyle } from './styles.js';
+import { nightStyle, satelliteStyle, finishStyle } from './styles.js';
 
 const ACCENT = '#1F6FFF', ACCENT_DARK = '#0B3FB3';
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -13,7 +13,7 @@ let map, me, meEl, destMarker, originMarker;
 let look = { night: false, satellite: false }, styleReady = false, fallback = false;
 let routesFC = EMPTY, radarsFC = EMPTY;
 let raf = 0;
-const cam = { follow: false, nav: false, from: null, to: null, bFrom: 0, bTo: 0, t0: 0, dur: 1, lastFix: 0, hasHeading: false, zoom: 17, pitch: 55 };
+const cam = { follow: false, nav: false, from: null, to: null, bFrom: 0, bTo: 0, t0: 0, dur: 1, lastFix: 0, hasHeading: false, zoom: 17, pitch: 50 };
 const handlers = { follow() {}, longpress() {}, routetap() {} };
 
 export const on = (event, fn) => (handlers[event] = fn);
@@ -27,12 +27,14 @@ export function initMap(container, { center, zoom, ...mapLook }) {
     attributionControl: false,
     maxPitch: 70,
     fadeDuration: 100,
+    canvasContextAttributes: { antialias: true }, // lignes nettes en vue inclinée
   });
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'top-left');
 
   map.on('style.load', () => {
     styleReady = true;
     addOverlayLayers();
+    showPois(!cam.nav);
   });
   // Style injoignable (serveur en panne, hors-ligne) : repli sur les tuiles raster OSM.
   map.on('error', (e) => {
@@ -70,7 +72,7 @@ export function setMapStyle({ night = look.night, satellite = look.satellite }, 
   fallback = false;
   map.setStyle(CONFIG.map.style, {
     diff: false,
-    transformStyle: (_, next) => (satellite ? satelliteStyle(next) : night ? nightStyle(next) : next),
+    transformStyle: (_, next) => finishStyle(satellite ? satelliteStyle(next) : night ? nightStyle(next) : next, night && !satellite),
   });
 }
 /** Après un retour du réseau : retente le style vectoriel si on est sur le secours raster. */
@@ -176,7 +178,7 @@ export function updateUser(pos, heading, speed = 0) {
   cam.bTo = heading ?? curB;
   if (heading != null && !cam.hasHeading) meEl.classList.add('has-heading');
   cam.hasHeading ||= heading != null;
-  cam.zoom = speed > 25 ? 15.3 : speed > 14 ? 16.2 : 17;
+  cam.zoom = speed > 25 ? 15.6 : speed > 14 ? 16.5 : 17.3;
   cam.dur = Math.min(1500, Math.max(300, now - cam.lastFix)); // interpolation calée sur la cadence GPS
   cam.lastFix = now;
   cam.t0 = now;
@@ -231,14 +233,20 @@ function navPadding() {
     : { top: h * 0.42, bottom: 0, left: 0, right: 0 }; // portrait : position dans le tiers bas
 }
 
+// En conduite, on masque les points d'intérêt : la carte ne garde que routes et noms de rues.
+function showPois(v) {
+  for (const l of map.getStyle()?.layers || []) if (/^poi/.test(l.id)) map.setLayoutProperty(l.id, 'visibility', v ? 'visible' : 'none');
+}
+
 /** Vue de navigation : 3D inclinée ou 2D à plat (toujours orientée dans le sens de la marche). */
 export function setNavView(is3d) {
-  cam.pitch = is3d ? 55 : 0;
+  cam.pitch = is3d ? 50 : 0;
   if (cam.follow && !raf && cam.to) raf = requestAnimationFrame(tick);
 }
 
 export function setNavMode(v) {
   cam.nav = v;
+  if (styleReady) showPois(!v);
   setFollow(false);
   if (v) recenter();
   else map.easeTo({ pitch: 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 600 });

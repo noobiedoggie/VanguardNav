@@ -1,10 +1,2 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#3D86FF"/>
-      <stop offset="1" stop-color="#0A3CC2"/>
-    </linearGradient>
-  </defs>
-  <rect width="1024" height="1024" rx="230" fill="url(#g)"/>
-  <path d="M512 232 712 760 512 652 312 760Z" fill="#fff" stroke="#fff" stroke-width="36" stroke-linejoin="round"/>
-</svg>
+<!-- Vanguard Navigator : un « V » (avant-garde) et la flèche de navigation qui en jaillit. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3D8BFF"/><stop offset="0.55" stop-color="#1F5FFF"/><stop offset="1" stop-color="#2A2FD0"/></linearGradient><radialGradient id="glow" cx="0.3" cy="0.2" r="0.8"><stop offset="0" stop-color="#fff" stop-opacity="0.22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs><rect width="1024" height="1024" rx="230" fill="url(#g)"/><rect width="1024" height="1024" rx="230" fill="url(#glow)"/><g transform="translate(512 512) scale(0.92) translate(-512 -505)"><path d="M282 290 L512 790 L742 290" fill="none" stroke="#fff" stroke-width="104" stroke-linecap="round" stroke-linejoin="round"/><path d="M512 196 L604 412 L512 368 L420 412 Z" fill="#fff" stroke="#fff" stroke-width="24" stroke-linejoin="round"/></g></svg>

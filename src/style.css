@@ -275,3 +275,6 @@ body.navigating .pill { top: calc(var(--safe-top) + 130px); }
 #nav .nav-top { pointer-events: none; }
 #nav .nav-top > * { pointer-events: auto; }
 .sheet.hidden-down .sheet-fab { display: none; }
+/* Flèche de position plus grande en navigation */
+body.navigating .me-arrow { inset: 4px; width: 56px; height: 56px; }
+body.navigating .me-halo { display: none; }

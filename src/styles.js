@@ -92,3 +92,12 @@ export function satelliteStyle(style) {
     ],
   };
 }
+
+// ── Finitions communes : pas de bâtiments 3D (blocs gris illisibles en conduite) + ciel à l'horizon ──
+const SKY = {
+  day: { 'sky-color': '#9cc3ff', 'horizon-color': '#e9f1ff', 'fog-color': '#f2f0ec', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-ground-blend': 0.4, 'atmosphere-blend': 0 },
+  night: { 'sky-color': '#070b16', 'horizon-color': '#1b2740', 'fog-color': '#111829', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-ground-blend': 0.4, 'atmosphere-blend': 0 },
+};
+export function finishStyle(style, night) {
+  return { ...style, sky: SKY[night ? 'night' : 'day'], layers: style.layers.filter((l) => l.type !== 'fill-extrusion') };
+}
