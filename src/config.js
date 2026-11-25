@@ -28,7 +28,7 @@ export const CONFIG = {
     url: 'https://valhalla1.openstreetmap.de/route',
     language: 'fr-FR',
     alternates: 2, // + l'itinéraire principal = 3 au maximum
-    timeoutMs: 15000,
+    timeoutMs: 45000, // un long trajet (> 1000 km) peut prendre du temps sur le serveur public
   },
   nav: {
     offRouteMeters: 45, // écart toléré avant de considérer qu'on a quitté la route
@@ -40,6 +40,12 @@ export const CONFIG = {
     // Radars fixes cartographiés dans OpenStreetMap (highway=speed_camera), via l'API Overpass.
     url: 'https://overpass-api.de/api/interpreter',
     maxDistance: 25, // m : au-delà, le radar n'est pas sur notre route
+  },
+  transit: {
+    // Transitous : transports en commun du monde entier (projet communautaire, API MOTIS).
+    url: 'https://api.transitous.org',
+    windowMin: 10, // minutes de circulation chargées à chaque mise à jour des véhicules
+    stopsMinZoom: 15,
   },
   voiceLang: 'fr-FR',
 };

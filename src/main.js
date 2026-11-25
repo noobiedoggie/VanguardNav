@@ -6,6 +6,7 @@ import * as map from './map.js';
 import { searchPlaces, reverseGeocode } from './search.js';
 import { fetchRoutes } from './routing.js';
 import { loadRadars } from './radars.js';
+import { planTransit, fetchSegments, vehiclePositions, fetchStops, fetchDepartures, modeInfo } from './transit.js';
 import { Guidance } from './guidance.js';
 import { isNight, haversine } from './geo.js';
 import { fmtDistance, fmtDuration, fmtClock, fmtSpeed, speedUnit } from './format.js';
@@ -31,6 +32,7 @@ const ERRORS = {
   noroute: 'Aucun itinéraire routier trouvé vers cette destination.',
   nolocation: 'Ce point n’est pas accessible en voiture. Choisissez un point sur une route.',
   toofar: 'Trajet trop long pour le serveur d’itinéraires.',
+  notransit: 'Aucun trajet en transports en commun trouvé ici à cette heure (horaires peut-être indisponibles pour cette région).',
   server: 'Service momentanément indisponible. Réessayez dans un instant.',
 };
 const errText = (e) => ERRORS[e?.kind] || ERRORS.server;
@@ -72,9 +74,11 @@ const sheet = initSheet($('#sheet'));
 setInterval(applyTheme, 60000);
 
 function setView(name) {
+  const wasRoutes = state.view === 'routes';
   state.view = name;
   showView(name);
   sheet.expand();
+  if (wasRoutes !== (name === 'routes')) transitLive(); // véhicules masqués pendant le choix d'un trajet
 }
 
 const syncOnline = () => {
@@ -302,7 +306,9 @@ function showPlace(p) {
   map.setDestination(p);
   setText($('#place-name'), p.name);
   setText($('#place-addr'), p.address);
+  $('#departures').hidden = !p.stopId;
   setView('place');
+  if (p.stopId) loadDepartures(p);
 }
 $('#place-go').onclick = () => planTrip(state.place);
 $('#place-from').onclick = () => {
@@ -326,6 +332,7 @@ function clearTrip() {
   state.pendingRoute = false;
   map.setRoutes([]);
   map.setRadars([]);
+  map.setTransitLegs([]);
   map.setOrigin(null);
   map.setDestination(null);
 }
@@ -350,10 +357,22 @@ async function computeRoutes() {
     state.pendingRoute = true;
     return renderRouteState(state.locError ? 'Position indisponible : choisissez un point de départ.' : 'En attente du signal GPS…', !state.locError);
   }
-  renderRouteState('Calcul de l’itinéraire…', true);
+  const transit = settings.travelMode === 'transit';
+  $('[data-view=routes]').classList.toggle('transit', transit);
+  map.setRoutes([]);
+  map.setRadars([]);
+  map.setTransitLegs([]);
+  renderRouteState(transit ? 'Recherche des transports en commun…' : 'Calcul de l’itinéraire…', true);
   routeCtrl?.abort();
   const ctrl = (routeCtrl = new AbortController());
   try {
+    if (transit) {
+      const itins = await planTransit(from, trip.to, ctrl.signal);
+      if (ctrl !== routeCtrl || state.trip !== trip) return;
+      Object.assign(trip, { itins, routes: [], active: 0 });
+      selectItin(0);
+      return map.fitRoutes([itins[0]], sheet.height());
+    }
     const routes = await fetchRoutes({ lon: from.lon, lat: from.lat }, trip.to, { ...routeOpts(), signal: ctrl.signal });
     if (ctrl !== routeCtrl || state.trip !== trip) return;
     trip.routes = routes;
@@ -368,7 +387,7 @@ async function computeRoutes() {
   } catch (e) {
     if (e.kind === 'cancel' || state.trip !== trip) return;
     trip.routes = [];
-    map.setRoutes([]);
+    trip.itins = null;
     renderRouteState(errText(e), false, true);
   }
 }
@@ -416,6 +435,144 @@ function selectRoute(i) {
   renderRoutes();
 }
 map.on('routetap', (i) => !state.nav && selectRoute(i));
+
+// ── Trajets en transports en commun ─────────────────────────
+const el = (tag, cls, text) => Object.assign(document.createElement(tag), cls ? { className: cls } : {}, text != null ? { textContent: text } : {});
+const hhmm = (d) => fmtClock(d);
+
+function legChip(l) {
+  const chip = el('span', l.mode === 'WALK' ? 'legchip walk' : 'legchip');
+  chip.innerHTML = `<svg><use href="#${modeInfo(l.mode).icon}"/></svg>`;
+  if (l.mode !== 'WALK') {
+    chip.style.background = l.color;
+    chip.style.color = l.textColor;
+    chip.append(l.name || modeInfo(l.mode).label);
+  }
+  return chip;
+}
+
+function legSteps(itin) {
+  const ul = el('ul', 'steps');
+  for (const l of itin.legs) {
+    const li = el('li');
+    const dot = el('span', 'dot');
+    dot.style.color = l.mode === 'WALK' ? 'var(--muted)' : l.color;
+    const body = el('div');
+    if (l.mode === 'WALK') {
+      body.append(el('span', 'muted', `Marche ${fmtDistance(l.distance, settings.units)} · ${fmtDuration(l.duration)}`));
+    } else {
+      body.append(el('b', '', `${modeInfo(l.mode).label} ${l.name}`.trim()), l.headsign ? ` → ${l.headsign}` : '');
+      body.append(el('div', 'muted', `${l.from.name}${l.from.track ? ` (voie ${l.from.track})` : ''} → ${l.to.name} · ${l.stops + 1} arrêt${l.stops ? 's' : ''}`));
+    }
+    li.append(el('span', 'tm', hhmm(l.from.time)), dot, body);
+    ul.append(li);
+  }
+  const end = el('li');
+  end.append(el('span', 'tm', hhmm(itin.end)), el('span', 'dot'), el('b', '', state.trip.to.name));
+  ul.append(end);
+  return ul;
+}
+
+function selectItin(i) {
+  const trip = state.trip, itin = trip?.itins?.[i];
+  if (!itin) return;
+  trip.active = i;
+  map.setTransitLegs(itin.legs);
+  setText($('#r-time'), fmtDuration(itin.duration));
+  setText($('#r-dist'), `${hhmm(itin.start)} → ${hhmm(itin.end)}`);
+  setText($('#r-eta'), itin.legs.every((l) => l.mode === 'WALK') ? 'À pied' : itin.transfers ? `${itin.transfers} correspondance${itin.transfers > 1 ? 's' : ''}` : 'Direct');
+  const cards = trip.itins.map((it, k) => {
+    const b = el('button', `route${k === i ? ' active' : ''}`);
+    b.type = 'button';
+    const top = el('div', 'grow');
+    top.append(el('b', '', fmtDuration(it.duration)), el('span', 'muted times', `  ${hhmm(it.start)} → ${hhmm(it.end)}`));
+    const legs = el('div', 'legs');
+    it.legs.filter((l) => l.mode !== 'WALK' || l.duration > 120).forEach((l, n) => {
+      if (n) legs.insertAdjacentHTML('beforeend', '<svg><use href="#i-back"/></svg>');
+      legs.append(legChip(l));
+    });
+    top.append(legs);
+    if (k === i) top.append(legSteps(it));
+    b.append(top);
+    b.onclick = () => selectItin(k);
+    return b;
+  });
+  $('#route-list').replaceChildren(...cards);
+}
+
+async function loadDepartures(place) {
+  const box = $('#departures');
+  box.replaceChildren(el('h3', '', 'Prochains départs'), Object.assign(el('div', 'spinner'), { style: 'margin: 10px auto' }));
+  try {
+    const deps = await fetchDepartures(place.stopId);
+    if (state.place !== place) return;
+    const rows = deps.map((d) => {
+      const r = el('div', `dep${d.cancelled ? ' cancelled' : ''}`);
+      r.append(el('span', `tm${d.delayed ? ' late' : ''}`, hhmm(d.time)));
+      if (d.realTime) r.append(Object.assign(el('span', 'live'), { title: 'Temps réel' }));
+      r.append(legChip(d), el('span', 'grow ellipsis', `${d.headsign}${d.track ? ` · voie ${d.track}` : ''}`));
+      return r;
+    });
+    box.replaceChildren(el('h3', '', 'Prochains départs'), ...(rows.length ? rows : [el('p', 'muted', 'Aucun départ prévu prochainement.')]));
+  } catch (e) {
+    if (state.place === place) box.replaceChildren(el('h3', '', 'Prochains départs'), el('p', 'muted', errText(e)));
+  }
+}
+
+// ── Véhicules et arrêts en direct sur la carte ──────────────
+const live = { segs: [], timer: 0, refresh: 0, ctrl: null, box: null, zoom: 0, failed: false };
+const liveOn = () => settings.transit && !state.nav && state.view !== 'routes';
+
+function transitLive() {
+  clearInterval(live.timer);
+  clearInterval(live.refresh);
+  live.ctrl?.abort();
+  live.box = null;
+  if (!liveOn()) {
+    live.segs = [];
+    map.setVehicles([]);
+    map.setStops([]);
+    return;
+  }
+  loadLive();
+  live.timer = setInterval(() => !document.hidden && map.setVehicles(vehiclePositions(live.segs)), 1000);
+  live.refresh = setInterval(() => loadLive(true), 60000);
+}
+
+async function loadLive(force = false) {
+  if (!liveOn() || document.hidden) return;
+  const { bounds, zoom } = map.getView();
+  const [s, w, n, e] = [bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast()];
+  const b = live.box;
+  // Zone déjà chargée (avec marge) et même niveau de détail : rien à faire.
+  if (!force && b && s >= b.s && w >= b.w && n <= b.n && e <= b.e && Math.abs(zoom - live.zoom) < 1) return;
+  const dy = (n - s) * 0.25, dx = (e - w) * 0.25;
+  const box = { s: s - dy, w: w - dx, n: n + dy, e: e + dx };
+  live.ctrl?.abort();
+  const ctrl = (live.ctrl = new AbortController());
+  try {
+    const [segs, stops] = await Promise.all([
+      fetchSegments(box, zoom, ctrl.signal),
+      zoom >= CONFIG.transit.stopsMinZoom ? fetchStops(box, ctrl.signal) : [],
+    ]);
+    if (ctrl !== live.ctrl || !liveOn()) return;
+    Object.assign(live, { segs, box, zoom, failed: false });
+    map.setVehicles(vehiclePositions(segs));
+    map.setStops(stops);
+  } catch (err) {
+    if (err.kind !== 'cancel' && !live.failed) {
+      live.failed = true;
+      toast('Transports en commun indisponibles pour le moment.');
+    }
+  }
+}
+let liveTimer = 0;
+map.on('viewchange', () => {
+  clearTimeout(liveTimer);
+  if (liveOn()) liveTimer = setTimeout(loadLive, 600);
+});
+map.on('stoptap', (p) => !state.nav && showPlace({ name: p.name, address: 'Arrêt de transports en commun', lon: +p.lon, lat: +p.lat, stopId: p.id }));
+map.on('vehicletap', (v) => toast(`${modeInfo(v.mode).label} ${v.name}${v.to ? ` → ${v.to}` : ''}`.trim(), { duration: 3000 }));
 $('#od-from').onclick = () => openSearch('origin');
 
 for (const chip of document.querySelectorAll('[data-avoid]')) {
@@ -466,6 +623,7 @@ async function startNavigation() {
   syncMute();
   native.keepAwake(true);
   map.setNavMode(true);
+  transitLive();
   navFix(state.fix);
   startLocation(true);
 }
@@ -555,6 +713,7 @@ function finishNavigation(arrived) {
   map.setNavMode(false);
   startLocation(false); // fin du service de premier plan et de sa notification
   clearTrip();
+  transitLive();
   if (arrived) {
     map.setDestination(nav.dest);
     setText($('#arrived-name'), nav.dest.name);
@@ -577,10 +736,10 @@ $('#btn-view').onclick = () => {
   onSettingChanged('navView');
 };
 $('#btn-layers').onclick = () => {
-  settings.mapType = settings.mapType === 'satellite' ? 'plan' : 'satellite';
-  onSettingChanged('mapType');
-  toast(settings.mapType === 'satellite' ? 'Vue satellite' : 'Vue plan', { duration: 1500 });
+  syncControls();
+  $('#layers').hidden = !$('#layers').hidden;
 };
+document.addEventListener('pointerdown', (e) => !e.target.closest('#layers, #btn-layers') && ($('#layers').hidden = true));
 
 $('#btn-mute').onclick = () => {
   settings.voice = !settings.voice;
@@ -605,6 +764,8 @@ function onSettingChanged(key) {
   if (key === 'theme') applyTheme();
   if (key === 'mapType') map.setMapStyle({ satellite: settings.mapType === 'satellite' });
   if (key === 'navView') syncView();
+  if (key === 'transit') transitLive();
+  if (key === 'travelMode' && state.trip && !state.nav) computeRoutes();
   if (key === 'radars') {
     const route = state.nav ? state.nav.guidance.route : state.trip?.routes[state.trip.active];
     if (!settings.radars) {
@@ -654,6 +815,7 @@ $('#settings-back').onclick = closeSettings;
 // ── Bouton retour Android et retour au premier plan ─────────
 native.onBackButton(() => {
   if (closeDialog()) return;
+  if (!$('#layers').hidden) return ($('#layers').hidden = true);
   if (!$('#search').hidden) return $('#search-back').click();
   if (!$('#settings').hidden) return closeSettings();
   if (state.nav) return native.minimizeApp(); // la navigation continue en arrière-plan
@@ -667,4 +829,6 @@ native.onResume(() => {
 
 syncControls();
 syncView();
+transitLive();
+document.addEventListener('visibilitychange', () => !document.hidden && loadLive(true));
 initLocation();

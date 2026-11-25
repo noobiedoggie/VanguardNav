@@ -20,6 +20,8 @@ export const settings = load('vn.settings', {
   mapType: 'plan', // 'plan' | 'satellite'
   navView: '3d', // '3d' | '2d'
   radars: true,
+  travelMode: 'car', // 'car' | 'transit'
+  transit: false, // véhicules et arrêts de transports en commun sur la carte
   voice: true,
   voiceURI: '', // '' = voix par défaut du téléphone
   avoidHighways: false,

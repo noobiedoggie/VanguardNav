@@ -110,6 +110,11 @@ export class Guidance {
       this.spoken.add(`${k}:far`);
       return once(`${k}:near`, nm.pre || nm.text);
     }
+    // Longue portion (autoroute…) juste après une manœuvre : « Continuez pendant 120 kilomètres. »
+    if (d > 5000 && k > 1) {
+      const post = once(`${k}:post`, this.route.maneuvers[k - 1].post);
+      if (post) return post;
+    }
     if (d <= far && d > near * 1.5) {
       return once(`${k}:far`, `Dans ${speakDistance(d, this.units)}, ${lcFirst(nm.alert || nm.pre || nm.text)}`);
     }

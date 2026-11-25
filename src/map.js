@@ -11,10 +11,10 @@ const EMPTY = { type: 'FeatureCollection', features: [] };
 
 let map, me, meEl, destMarker, originMarker;
 let look = { night: false, satellite: false }, styleReady = false, fallback = false;
-let routesFC = EMPTY, radarsFC = EMPTY;
+let routesFC = EMPTY, radarsFC = EMPTY, legsFC = EMPTY, vehiclesFC = EMPTY, stopsFC = EMPTY;
 let raf = 0;
 const cam = { follow: false, nav: false, from: null, to: null, bFrom: 0, bTo: 0, t0: 0, dur: 1, lastFix: 0, hasHeading: false, zoom: 17, pitch: 50 };
-const handlers = { follow() {}, longpress() {}, routetap() {} };
+const handlers = { follow() {}, longpress() {}, routetap() {}, stoptap() {}, vehicletap() {}, viewchange() {} };
 
 export const on = (event, fn) => (handlers[event] = fn);
 export const getMap = () => map;
@@ -55,10 +55,14 @@ export function initMap(container, { center, zoom, ...mapLook }) {
   }
   map.on('click', (e) => {
     if (!map.getLayer('route-alt')) return;
-    const { x, y } = e.point;
-    const f = map.queryRenderedFeatures([[x - 14, y - 14], [x + 14, y + 14]], { layers: ['route-alt'] })[0];
-    if (f) handlers.routetap(f.properties.i);
+    const { x, y } = e.point, box = [[x - 14, y - 14], [x + 14, y + 14]];
+    const [f] = map.queryRenderedFeatures(box, { layers: ['vehicles', 'transit-stops', 'route-alt'] });
+    if (!f) return;
+    if (f.layer.id === 'vehicles') handlers.vehicletap(f.properties);
+    else if (f.layer.id === 'transit-stops') handlers.stoptap(f.properties);
+    else handlers.routetap(f.properties.i);
   });
+  map.on('moveend', () => handlers.viewchange());
   bindLongPress();
   addEventListener('resize', () => cam.nav && map.setPadding(navPadding()));
   return map;
@@ -111,7 +115,48 @@ function addOverlayLayers() {
     paint: { 'line-color': ACCENT_DARK, 'line-width': width(7, 17) } }, before);
   map.addLayer({ id: 'route-line', type: 'line', source: 'routes', filter: ['==', ['get', 'active'], true], layout,
     paint: { 'line-color': ACCENT, 'line-width': width(4.5, 12) } }, before);
+
+  // Trajet en transports : marche en pointillés, chaque ligne dans sa couleur.
+  map.addSource('transit-legs', { type: 'geojson', data: legsFC });
+  map.addLayer({ id: 'legs-walk', type: 'line', source: 'transit-legs', filter: ['get', 'walk'], layout,
+    paint: { 'line-color': look.night ? '#AEB6C7' : '#5B6476', 'line-width': width(3, 6), 'line-dasharray': [0.1, 2] } }, before);
+  map.addLayer({ id: 'legs-casing', type: 'line', source: 'transit-legs', filter: ['!', ['get', 'walk']], layout,
+    paint: { 'line-color': '#ffffff', 'line-width': width(7, 15) } }, before);
+  map.addLayer({ id: 'legs-line', type: 'line', source: 'transit-legs', filter: ['!', ['get', 'walk']], layout,
+    paint: { 'line-color': ['get', 'color'], 'line-width': width(4.5, 10) } }, before);
+
+  // Arrêts et véhicules en circulation, au-dessus de tout.
+  const labels = !!map.getStyle().glyphs;
+  const text = (offset) => ({ 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Bold'], 'text-size': 11, 'text-offset': [0, offset], 'text-anchor': 'top', 'text-optional': true });
+  map.addSource('stops', { type: 'geojson', data: stopsFC });
+  map.addLayer({ id: 'transit-stops', type: 'circle', source: 'stops',
+    paint: { 'circle-radius': 5, 'circle-color': '#ffffff', 'circle-stroke-color': '#1F2937', 'circle-stroke-width': 2 } });
+  if (labels) map.addLayer({ id: 'stop-labels', type: 'symbol', source: 'stops', minzoom: 16, layout: text(0.6),
+    paint: { 'text-color': look.night ? '#E5E9F2' : '#1F2937', 'text-halo-color': look.night ? '#0B1020' : '#ffffff', 'text-halo-width': 1.5 } });
+  map.addSource('vehicles', { type: 'geojson', data: vehiclesFC });
+  map.addLayer({ id: 'vehicles', type: 'circle', source: 'vehicles',
+    paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 3.5, 14, 8], 'circle-color': ['get', 'color'], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
+  if (labels) map.addLayer({ id: 'vehicle-labels', type: 'symbol', source: 'vehicles', minzoom: 13, layout: text(0.9),
+    paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#ffffff', 'text-halo-width': 2 } });
 }
+
+const fc = (features) => ({ type: 'FeatureCollection', features });
+const point = (p, props) => ({ type: 'Feature', properties: props, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } });
+
+/** Étapes d'un trajet en transports : [{ mode, color, coords }]. */
+export function setTransitLegs(legs = []) {
+  legsFC = fc(legs.filter((l) => l.coords.length > 1).map((l) => ({ type: 'Feature', properties: { walk: l.mode === 'WALK', color: l.color }, geometry: { type: 'LineString', coordinates: l.coords } })));
+  map.getSource('transit-legs')?.setData(legsFC);
+}
+export function setVehicles(list = []) {
+  vehiclesFC = fc(list.map((v) => point(v, { name: v.name, color: v.color, mode: v.mode, to: v.to })));
+  map.getSource('vehicles')?.setData(vehiclesFC);
+}
+export function setStops(list = []) {
+  stopsFC = fc(list.map((s) => point(s, { id: s.id, name: s.name, lon: s.lon, lat: s.lat })));
+  map.getSource('stops')?.setData(stopsFC);
+}
+export const getView = () => ({ bounds: map.getBounds(), zoom: map.getZoom() });
 
 export function setRoutes(routes, active = 0) {
   routesFC = {
@@ -129,7 +174,7 @@ export function setRadars(list = []) {
 
 export function fitRoutes(routes, bottomPx) {
   const b = new maplibregl.LngLatBounds();
-  routes.forEach((r) => r.coords.forEach((c) => b.extend(c)));
+  routes.forEach((r) => (r.legs ? r.legs.flatMap((l) => l.coords) : r.coords).forEach((c) => b.extend(c)));
   if (!routes.length) return;
   const { clientWidth: w, clientHeight: h } = map.getContainer();
   const land = w > h && w >= 640;

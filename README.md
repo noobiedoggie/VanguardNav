@@ -1,6 +1,6 @@
 # Vanguard Navigator
 
-Navigation GPS Android minimaliste : carte plan (jour/nuit) ou satellite, recherche d’adresses, jusqu’à 3 itinéraires, guidage vocal en français, vue 3D ou 2D, alertes radars, recalcul automatique. Aucune clé API, aucun service payant.
+Navigation GPS Android minimaliste : carte plan (jour/nuit) ou satellite, recherche d’adresses, jusqu’à 3 itinéraires, guidage vocal en français, vue 3D ou 2D, alertes radars, recalcul automatique, et un mode **transports en commun** mondial (trajets, véhicules en direct, départs aux arrêts). Aucune clé API, aucun service payant.
 
 ## 1. Pousser le code
 
@@ -51,6 +51,7 @@ Tous réglables en haut de [`src/config.js`](src/config.js) :
 | Satellite | Esri World Imagery |
 | Radars | Radars fixes OpenStreetMap (`highway=speed_camera`) via l’API Overpass |
 | Recherche | Photon (komoot) |
+| Transports en commun | Transitous (API MOTIS, données GTFS du monde entier, communautaire) |
 | Itinéraires | Valhalla (FOSSGIS) — 1 requête/s max |
 
 ## Structure
@@ -62,11 +63,14 @@ src/search.js     recherche et géocodage inverse
 src/routing.js    appel Valhalla, analyse des trajets
 src/radars.js     radars le long de l’itinéraire (Overpass)
 src/styles.js     variantes nuit et satellite du style de carte
+src/transit.js    transports en commun : trajets, véhicules, arrêts, départs (Transitous)
 src/guidance.js   moteur de guidage (annonces, sortie de route, arrivée) — sans DOM, testé
 src/native.js     plugins Capacitor (GPS arrière-plan, voix, écran allumé, barre de statut)
 src/main.js       logique d’écran
 android/          projet Android Capacitor
 assets/           sources de l’icône et de l’écran de démarrage
 ```
+
+Les services gratuits sont partagés : pour une diffusion publique de l’app, prévenez Transitous (transitous.org) et hébergez idéalement vos propres serveurs.
 
 Développement sur PC : `npm install`, `npm run dev`, `npm test`.

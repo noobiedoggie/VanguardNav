@@ -176,3 +176,55 @@ test('guidage : alerte radar annoncée une fois, avec la limite', () => {
   assert.equal(at(260).speech, null);
   assert.equal(at(530).radar, null, 'radar dépassé');
 });
+
+// ── Longs trajets et transports en commun ──────────────────
+import { parseItinerary, vehiclePositions } from '../src/transit.js';
+import { fmtClock } from '../src/format.js';
+
+test('long trajet : « Continuez pendant… » après une manœuvre, heure d’arrivée avec le jour', () => {
+  // 1 km nord, virage, puis 9 km vers l'est.
+  const c = [];
+  for (let i = 0; i <= 10; i++) c.push([2.35, 48.85 + i * LAT]);
+  for (let i = 1; i <= 90; i++) c.push([2.35 + i * LON, 48.85 + 10 * LAT]);
+  const r = {
+    coords: c, cum: cumulative(c), time: 600, length: 10000,
+    maneuvers: [
+      { type: 1, begin: 0, end: 10, time: 60, pre: 'Roulez vers le nord.' },
+      { type: 10, begin: 10, end: 100, time: 540, pre: 'Tournez à droite sur l’A4.', post: 'Continuez pendant 9 kilomètres.' },
+      { type: 4, begin: 100, end: 100, time: 0, pre: 'Vous êtes arrivé.' },
+    ],
+  };
+  const g = new Guidance(r, { silentStart: true });
+  g.update({ lon: 2.35, lat: 48.85 + 9.5 * LAT, accuracy: 5, speed: 14 });
+  const after = g.update({ lon: c[12][0], lat: c[12][1], accuracy: 5, speed: 25 });
+  assert.equal(after.speech, 'Continuez pendant 9 kilomètres.');
+  assert.equal(g.update({ lon: c[13][0], lat: c[13][1], accuracy: 5, speed: 25 }).speech, null);
+
+  const now = new Date('2026-11-25T10:00:00');
+  assert.equal(fmtClock(new Date('2026-11-25T14:05:00'), now), '14:05');
+  assert.match(fmtClock(new Date('2026-11-26T08:15:00'), now), /^jeu\.? 08:15$/);
+});
+
+test('transports : analyse d’un trajet MOTIS et position des véhicules', () => {
+  const it = parseItinerary({
+    duration: 1500, startTime: '2026-11-25T08:00:00Z', endTime: '2026-11-25T08:25:00Z', transfers: 0,
+    legs: [
+      { mode: 'WALK', from: { name: 'Départ' }, to: { name: 'Gare' }, startTime: '2026-11-25T08:00:00Z', endTime: '2026-11-25T08:05:00Z', duration: 300, distance: 350, legGeometry: { points: '_p~iF~ps|U_ulLnnqC', precision: 5, length: 2 } },
+      { mode: 'BUS', displayName: '42', headsign: 'Mairie', routeColor: 'FF8800', routeTextColor: '000000', realTime: true,
+        from: { name: 'Gare', track: 'B' }, to: { name: 'Mairie' }, startTime: '2026-11-25T08:05:00Z', endTime: '2026-11-25T08:25:00Z', duration: 1200,
+        intermediateStops: [{}, {}, {}], legGeometry: { points: '_p~iF~ps|U_ulLnnqC', precision: 5, length: 2 } },
+    ],
+  });
+  assert.equal(it.legs[1].name, '42');
+  assert.equal(it.legs[1].color, '#FF8800');
+  assert.equal(it.legs[1].textColor, '#000000');
+  assert.equal(it.legs[1].stops, 3);
+  assert.deepEqual(it.legs[1].coords[1], [-120.95, 40.7]);
+  assert.equal(it.legs[0].color, '#8A93A6', 'marche : couleur par défaut');
+
+  const coords = [[2.35, 48.85], [2.35, 48.86]];
+  const seg = { mode: 'TRAM', name: 'T3', color: '#D6246E', to: 'Porte', dep: 0, arr: 100000, coords, cum: cumulative(coords) };
+  const [v] = vehiclePositions([seg], 25000);
+  near(v.lat, 48.8525, 1e-6);
+  assert.equal(vehiclePositions([seg], 100001).length, 0, 'segment terminé');
+});

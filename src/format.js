@@ -31,7 +31,11 @@ export function fmtDuration(sec) {
   return `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`;
 }
 
-export const fmtClock = (date) => date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+export function fmtClock(date, now = new Date()) {
+  const time = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  if (date.toDateString() === now.toDateString()) return time;
+  return `${date.toLocaleDateString('fr-FR', { weekday: 'short' })} ${time}`; // long trajet : « mer. 08:15 »
+}
 
 export const fmtSpeed = (ms, units) => Math.round((ms || 0) * (units === 'mi' ? 2.23694 : 3.6));
 export const speedUnit = (units) => (units === 'mi' ? 'mph' : 'km/h');

@@ -45,8 +45,8 @@ export function radarsOnRoute(route, nodes) {
 /** Charge les radars de plusieurs itinéraires en une seule requête et les range dans route.radars. */
 export async function loadRadars(routes) {
   const boxes = routes.flatMap((r) => routeBoxes(r));
-  const query = `[out:json][timeout:25];(${boxes.map(({ bbox }) => `node["highway"="speed_camera"](${bbox.map((v) => v.toFixed(5)).join(',')});`).join('')});out;`;
-  const { ok, json } = await fetchJson(CONFIG.radars.url, { method: 'POST', body: new URLSearchParams({ data: query }), timeoutMs: 25000 });
+  const query = `[out:json][timeout:90];(${boxes.map(({ bbox }) => `node["highway"="speed_camera"](${bbox.map((v) => v.toFixed(5)).join(',')});`).join('')});out;`;
+  const { ok, json } = await fetchJson(CONFIG.radars.url, { method: 'POST', body: new URLSearchParams({ data: query }), timeoutMs: 100000 });
   if (!ok || !Array.isArray(json?.elements)) throw new AppError('server');
   const nodes = json.elements.map((el) => ({ lon: el.lon, lat: el.lat, maxspeed: parseInt(el.tags?.maxspeed, 10) || null }));
   for (const r of routes) r.radars = radarsOnRoute(r, nodes);
