@@ -1,0 +1,17 @@
+{
+  "appId": "com.vanguard.navigator",
+  "appName": "Vanguard Navigator",
+  "webDir": "dist",
+  "android": {
+    "useLegacyBridge": true,
+    "backgroundColor": "#0B1020"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#0B1020",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
+    }
+  }
+}

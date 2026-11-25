@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Vanguard Navigator</string>
+    <string name="title_activity_main">Vanguard Navigator</string>
+    <string name="package_name">com.vanguard.navigator</string>
+    <string name="custom_url_scheme">com.vanguard.navigator</string>
+    <!-- Notification affichée pendant la navigation (plugin background-geolocation) -->
+    <string name="capacitor_background_geolocation_notification_channel_name">Navigation</string>
+    <string name="capacitor_background_geolocation_notification_icon">drawable/ic_stat_nav</string>
+    <string name="capacitor_background_geolocation_notification_color">#1F6FFF</string>
+</resources>

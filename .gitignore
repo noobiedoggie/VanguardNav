@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+# signature de release : jamais dans le dépôt
+*.jks
+release.keystore

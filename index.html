@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#0B1020" />
+    <title>Vanguard Navigator</title>
+  </head>
+  <body>
+    <div id="map" aria-label="Carte"></div>
+
+    <div id="offline" class="pill warn" hidden>Pas de connexion Internet</div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden><span></span><button type="button"></button></div>
+
+    <div class="top-right">
+      <button id="btn-settings" class="fab small" aria-label="Réglages"><svg><use href="#i-sliders" /></svg></button>
+      <button id="btn-compass" class="fab small" aria-label="Remettre le nord en haut" hidden><svg viewBox="0 0 24 24" class="needle"><path d="M12 3l4 9H8z" fill="#FF3B30" /><path d="M12 21l-4-9h8z" fill="currentColor" opacity=".45" /></svg></button>
+    </div>
+
+    <!-- ═══ Feuille principale (bottom sheet) ═══ -->
+    <section id="sheet" class="sheet">
+      <button id="btn-locate" class="fab sheet-fab" aria-label="Ma position"><svg><use href="#i-locate" /></svg></button>
+      <div class="handle" aria-hidden="true"></div>
+
+      <div class="view" data-view="home">
+        <div class="sheet-head">
+          <button id="search-open" class="searchbar" type="button"><svg><use href="#i-search" /></svg><span>Où allez-vous ?</span></button>
+        </div>
+        <div class="chips">
+          <button class="chip" data-fav="home" type="button"><svg><use href="#i-home" /></svg><span>Domicile</span></button>
+          <button class="chip" data-fav="work" type="button"><svg><use href="#i-work" /></svg><span>Travail</span></button>
+        </div>
+      </div>
+
+      <div class="view" data-view="place" hidden>
+        <div class="sheet-head">
+          <div class="grow">
+            <h2 id="place-name"></h2>
+            <p id="place-addr" class="muted"></p>
+          </div>
+          <button class="icon-btn" data-close type="button" aria-label="Fermer"><svg><use href="#i-close" /></svg></button>
+        </div>
+        <div class="actions">
+          <button id="place-go" class="btn primary" type="button"><svg><use href="#i-nav" /></svg>Itinéraire</button>
+          <button id="place-from" class="btn" type="button">Partir d’ici</button>
+        </div>
+      </div>
+
+      <div class="view" data-view="routes" hidden>
+        <div class="sheet-head">
+          <div class="grow">
+            <div class="summary"><b id="r-time">–</b><span id="r-dist" class="muted"></span></div>
+            <div id="r-eta" class="muted"></div>
+          </div>
+          <button id="btn-start" class="btn primary lg" type="button"><svg><use href="#i-nav" /></svg>Démarrer</button>
+        </div>
+        <div class="od">
+          <button id="od-from" class="od-row" type="button"><span class="od-dot"></span><span id="od-from-label" class="ellipsis">Ma position</span><svg class="chev"><use href="#i-edit" /></svg></button>
+          <div class="od-row"><span class="od-pin"></span><span id="od-to-label" class="ellipsis"></span></div>
+          <button class="icon-btn od-close" data-close type="button" aria-label="Fermer"><svg><use href="#i-close" /></svg></button>
+        </div>
+        <div id="route-list" class="route-list"></div>
+        <div class="chips wrap">
+          <button class="chip toggle" data-avoid="avoidHighways" type="button">Sans autoroutes</button>
+          <button class="chip toggle" data-avoid="avoidTolls" type="button">Sans péages</button>
+          <button class="chip toggle" data-avoid="avoidFerries" type="button">Sans ferries</button>
+        </div>
+      </div>
+
+      <div class="view" data-view="arrived" hidden>
+        <div class="sheet-head">
+          <div class="arrived-icon"><svg><use href="#i-flag" /></svg></div>
+          <div class="grow">
+            <h2>Vous êtes arrivé</h2>
+            <p id="arrived-name" class="muted"></p>
+          </div>
+        </div>
+        <div class="actions"><button class="btn primary" data-close type="button">Terminer</button></div>
+      </div>
+    </section>
+
+    <!-- ═══ Recherche ═══ -->
+    <section id="search" class="screen" hidden>
+      <div class="screen-top">
+        <button id="search-back" class="icon-btn" type="button" aria-label="Retour"><svg><use href="#i-back" /></svg></button>
+        <input id="search-input" type="search" placeholder="Adresse, lieu, ville…" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search" />
+        <button id="search-clear" class="icon-btn" type="button" aria-label="Effacer" hidden><svg><use href="#i-close" /></svg></button>
+      </div>
+      <div id="search-mode" class="search-mode" hidden></div>
+      <ul id="search-results" class="list"></ul>
+    </section>
+
+    <!-- ═══ Réglages ═══ -->
+    <section id="settings" class="screen" hidden>
+      <div class="screen-top">
+        <button id="settings-back" class="icon-btn" type="button" aria-label="Retour"><svg><use href="#i-back" /></svg></button>
+        <h2>Réglages</h2>
+      </div>
+      <div class="settings-body">
+        <h3>Unités</h3>
+        <div class="seg" data-setting="units"><button data-value="km">Kilomètres</button><button data-value="mi">Miles</button></div>
+        <h3>Thème</h3>
+        <div class="seg" data-setting="theme"><button data-value="auto">Auto</button><button data-value="day">Jour</button><button data-value="night">Nuit</button></div>
+        <p class="hint">Auto : passe en mode nuit au coucher du soleil.</p>
+        <h3>Voix</h3>
+        <label class="row-switch">Guidage vocal<input type="checkbox" data-setting="voice" class="switch" /></label>
+        <label class="row-select">Voix<select id="voice-select"></select></label>
+        <button id="voice-test" class="btn" type="button">Tester la voix</button>
+        <h3>Options de trajet</h3>
+        <label class="row-switch">Éviter les autoroutes<input type="checkbox" data-setting="avoidHighways" class="switch" /></label>
+        <label class="row-switch">Éviter les péages<input type="checkbox" data-setting="avoidTolls" class="switch" /></label>
+        <label class="row-switch">Éviter les ferries<input type="checkbox" data-setting="avoidFerries" class="switch" /></label>
+        <h3>À propos</h3>
+        <p class="hint">Vanguard Navigator 1.0<br />Données © contributeurs OpenStreetMap · Carte OpenFreeMap · Itinéraires Valhalla (FOSSGIS) · Recherche Photon (komoot).</p>
+      </div>
+    </section>
+
+    <!-- ═══ Navigation ═══ -->
+    <div id="nav" hidden>
+      <div id="nav-banner" class="nav-banner">
+        <svg id="nav-arrow" class="nav-arrow"><use href="#m-straight" /></svg>
+        <div class="grow">
+          <div id="nav-dist" class="nav-dist"></div>
+          <div id="nav-street" class="nav-street ellipsis"></div>
+        </div>
+      </div>
+      <div class="nav-bottom">
+        <div class="nav-float">
+          <div id="nav-speed" class="speed"><b>0</b><small>km/h</small></div>
+          <button id="btn-recenter" class="btn recenter" type="button" hidden><svg><use href="#i-nav" /></svg>Recentrer</button>
+        </div>
+        <div class="nav-panel">
+          <button id="btn-stop" class="round danger" type="button" aria-label="Arrêter la navigation"><svg><use href="#i-close" /></svg></button>
+          <div class="nav-summary">
+            <div id="nav-eta" class="eta"></div>
+            <div id="nav-remaining" class="muted"></div>
+          </div>
+          <button id="btn-mute" class="round" type="button" aria-label="Couper le guidage vocal"><svg><use href="#i-sound" /></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Dialogue (permissions, confirmations) ═══ -->
+    <div id="dialog" class="dialog" hidden>
+      <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+        <div class="dialog-icon"><svg><use href="#i-locate" /></svg></div>
+        <h3 id="dialog-title"></h3>
+        <p id="dialog-text"></p>
+        <div class="dialog-actions">
+          <button id="dialog-cancel" class="btn" type="button"></button>
+          <button id="dialog-ok" class="btn primary" type="button"></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Icônes -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="display: none">
+      <defs>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M16.5 16.5 21 21" /></symbol>
+        <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></symbol>
+        <symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2.5" fill="currentColor" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></symbol>
+        <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10" /></symbol>
+        <symbol id="i-work" viewBox="0 0 24 24"><rect x="3.5" y="7.5" width="17" height="12" rx="2" /><path d="M9 7.5V5h6v2.5M3.5 13h17" /></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></symbol>
+        <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.9-6.5-11a6.5 6.5 0 0 1 13 0c0 5.1-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.3" /></symbol>
+        <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></symbol>
+        <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></symbol>
+        <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z" /></symbol>
+        <symbol id="i-nav" viewBox="0 0 24 24"><path d="M12 3l7 18-7-4-7 4z" fill="currentColor" stroke-linejoin="round" /></symbol>
+        <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z" fill="currentColor" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></symbol>
+        <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z" fill="currentColor" /><path d="M16 9.5l5 5M21 9.5l-5 5" /></symbol>
+        <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5" /></symbol>
+        <!-- Manœuvres (les virages à gauche sont des miroirs) -->
+        <symbol id="m-straight" viewBox="0 0 24 24"><path d="M12 21V4M7 9l5-5 5 5" /></symbol>
+        <symbol id="m-slight" viewBox="0 0 24 24"><path d="M9 21v-8l7-7M10 6h6v6" /></symbol>
+        <symbol id="m-turn" viewBox="0 0 24 24"><path d="M7 21v-6a4 4 0 0 1 4-4h8M15 7l4 4-4 4" /></symbol>
+        <symbol id="m-sharp" viewBox="0 0 24 24"><path d="M8 21V5l9 9M17 8v6h-6" /></symbol>
+        <symbol id="m-uturn" viewBox="0 0 24 24"><path d="M16 21V10a4 4 0 0 0-8 0v6M4.5 12.5 8 16l3.5-3.5" /></symbol>
+        <symbol id="m-roundabout" viewBox="0 0 24 24"><circle cx="12" cy="11" r="3.5" /><path d="M12 21v-6.5M12 7.5V3M8.5 6 12 3l3.5 3" /></symbol>
+        <symbol id="m-merge" viewBox="0 0 24 24"><path d="M7 21v-4l5-5V4M17 21v-4l-3-3M8 8l4-4 4 4" /></symbol>
+        <symbol id="m-dest" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.9-6.5-11a6.5 6.5 0 0 1 13 0c0 5.1-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.3" fill="currentColor" /></symbol>
+        <symbol id="m-ferry" viewBox="0 0 24 24"><path d="M4 15h16l-2.5 5h-11zM7 15V9h10v6M12 5v4" /></symbol>
+      </defs>
+    </svg>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
