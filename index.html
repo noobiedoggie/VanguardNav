@@ -15,6 +15,7 @@
 
     <div class="top-right">
       <button id="btn-settings" class="fab small" aria-label="Réglages"><svg><use href="#i-sliders" /></svg></button>
+      <button id="btn-layers" class="fab small" aria-label="Basculer plan / satellite"><svg><use href="#i-layers" /></svg></button>
       <button id="btn-compass" class="fab small" aria-label="Remettre le nord en haut" hidden><svg viewBox="0 0 24 24" class="needle"><path d="M12 3l4 9H8z" fill="#FF3B30" /><path d="M12 21l-4-9h8z" fill="currentColor" opacity=".45" /></svg></button>
     </div>
 
@@ -103,6 +104,13 @@
         <h3>Thème</h3>
         <div class="seg" data-setting="theme"><button data-value="auto">Auto</button><button data-value="day">Jour</button><button data-value="night">Nuit</button></div>
         <p class="hint">Auto : passe en mode nuit au coucher du soleil.</p>
+        <h3>Carte</h3>
+        <div class="seg" data-setting="mapType"><button data-value="plan">Plan</button><button data-value="satellite">Satellite</button></div>
+        <h3>Vue en navigation</h3>
+        <div class="seg" data-setting="navView"><button data-value="3d">3D</button><button data-value="2d">2D</button></div>
+        <h3>Radars</h3>
+        <label class="row-switch">Alertes radars (visuelles et vocales)<input type="checkbox" data-setting="radars" class="switch" /></label>
+        <p class="hint">Radars fixes issus d’OpenStreetMap : la couverture dépend des contributeurs. Respectez toujours les limitations.</p>
         <h3>Voix</h3>
         <label class="row-switch">Guidage vocal<input type="checkbox" data-setting="voice" class="switch" /></label>
         <label class="row-select">Voix<select id="voice-select"></select></label>
@@ -112,23 +120,33 @@
         <label class="row-switch">Éviter les péages<input type="checkbox" data-setting="avoidTolls" class="switch" /></label>
         <label class="row-switch">Éviter les ferries<input type="checkbox" data-setting="avoidFerries" class="switch" /></label>
         <h3>À propos</h3>
-        <p class="hint">Vanguard Navigator 1.0<br />Données © contributeurs OpenStreetMap · Carte OpenFreeMap · Itinéraires Valhalla (FOSSGIS) · Recherche Photon (komoot).</p>
+        <p class="hint">Vanguard Navigator 1.0<br />Données © contributeurs OpenStreetMap · Carte OpenFreeMap · Itinéraires Valhalla (FOSSGIS) · Recherche Photon (komoot) · Radars OpenStreetMap (Overpass) · Imagerie satellite Esri.</p>
       </div>
     </section>
 
     <!-- ═══ Navigation ═══ -->
     <div id="nav" hidden>
-      <div id="nav-banner" class="nav-banner">
-        <svg id="nav-arrow" class="nav-arrow"><use href="#m-straight" /></svg>
-        <div class="grow">
-          <div id="nav-dist" class="nav-dist"></div>
-          <div id="nav-street" class="nav-street ellipsis"></div>
+      <div class="nav-top">
+        <div id="nav-banner" class="nav-banner">
+          <svg id="nav-arrow" class="nav-arrow"><use href="#m-straight" /></svg>
+          <div class="grow">
+            <div id="nav-dist" class="nav-dist"></div>
+            <div id="nav-street" class="nav-street ellipsis"></div>
+          </div>
+        </div>
+        <div id="nav-radar" class="radar-alert" role="alert" hidden>
+          <svg class="radar-ic" viewBox="0 0 24 24"><use href="#i-radar" /></svg>
+          <div><b id="radar-dist"></b><small>Radar</small></div>
+          <div id="radar-limit" class="limit" hidden></div>
         </div>
       </div>
       <div class="nav-bottom">
         <div class="nav-float">
           <div id="nav-speed" class="speed"><b>0</b><small>km/h</small></div>
-          <button id="btn-recenter" class="btn recenter" type="button" hidden><svg><use href="#i-nav" /></svg>Recentrer</button>
+          <div class="nav-float-right">
+            <button id="btn-recenter" class="btn recenter" type="button" hidden><svg><use href="#i-nav" /></svg>Recentrer</button>
+            <button id="btn-view" class="fab small view-toggle" type="button" aria-label="Basculer vue 2D / 3D">2D</button>
+          </div>
         </div>
         <div class="nav-panel">
           <button id="btn-stop" class="round danger" type="button" aria-label="Arrêter la navigation"><svg><use href="#i-close" /></svg></button>
@@ -170,6 +188,8 @@
         <symbol id="i-nav" viewBox="0 0 24 24"><path d="M12 3l7 18-7-4-7 4z" fill="currentColor" stroke-linejoin="round" /></symbol>
         <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z" fill="currentColor" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></symbol>
         <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z" fill="currentColor" /><path d="M16 9.5l5 5M21 9.5l-5 5" /></symbol>
+        <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3.5 21 8.5 12 13.5 3 8.5z" /><path d="M3 12.5l9 5 9-5M3 16.5l9 5 9-5" /></symbol>
+        <symbol id="i-radar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5" fill="#fff" stroke="#E5242B" stroke-width="2.5" /><path d="M6.5 9.5h2l1-1.4h5l1 1.4h2a.8.8 0 0 1 .8.8v5.4a.8.8 0 0 1-.8.8h-11a.8.8 0 0 1-.8-.8v-5.4a.8.8 0 0 1 .8-.8z" fill="#111" stroke="none" /><circle cx="12" cy="13" r="2.2" fill="#fff" stroke="none" /></symbol>
         <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5" /></symbol>
         <!-- Manœuvres (les virages à gauche sont des miroirs) -->
         <symbol id="m-straight" viewBox="0 0 24 24"><path d="M12 21V4M7 9l5-5 5 5" /></symbol>

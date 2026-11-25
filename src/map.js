@@ -4,26 +4,24 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { CONFIG, OSM_RASTER_STYLE } from './config.js';
 import { haversine } from './geo.js';
+import { nightStyle, satelliteStyle } from './styles.js';
 
 const ACCENT = '#1F6FFF', ACCENT_DARK = '#0B3FB3';
-const NAV_PITCH = 55;
+const EMPTY = { type: 'FeatureCollection', features: [] };
 
 let map, me, meEl, destMarker, originMarker;
-let night = false, styleReady = false, currentStyle = null;
-let routesFC = { type: 'FeatureCollection', features: [] };
+let look = { night: false, satellite: false }, styleReady = false, fallback = false;
+let routesFC = EMPTY, radarsFC = EMPTY;
 let raf = 0;
-const cam = { follow: false, nav: false, from: null, to: null, bFrom: 0, bTo: 0, t0: 0, dur: 1, lastFix: 0, hasHeading: false, zoom: 17 };
+const cam = { follow: false, nav: false, from: null, to: null, bFrom: 0, bTo: 0, t0: 0, dur: 1, lastFix: 0, hasHeading: false, zoom: 17, pitch: 55 };
 const handlers = { follow() {}, longpress() {}, routetap() {} };
 
 export const on = (event, fn) => (handlers[event] = fn);
 export const getMap = () => map;
 
-export function initMap(container, { night: n, center, zoom }) {
-  night = n;
-  currentStyle = n ? CONFIG.map.styleNight : CONFIG.map.styleDay;
+export function initMap(container, { center, zoom, ...mapLook }) {
   map = new maplibregl.Map({
     container,
-    style: currentStyle,
     center,
     zoom,
     attributionControl: false,
@@ -34,15 +32,16 @@ export function initMap(container, { night: n, center, zoom }) {
 
   map.on('style.load', () => {
     styleReady = true;
-    addRouteLayers();
+    addOverlayLayers();
   });
-  // Style injoignable (serveur en panne, hors-ligne) : style de jour, puis tuiles raster OSM.
+  // Style injoignable (serveur en panne, hors-ligne) : repli sur les tuiles raster OSM.
   map.on('error', (e) => {
-    if (styleReady || e.sourceId || currentStyle === OSM_RASTER_STYLE) return;
+    if (styleReady || e.sourceId || fallback) return;
     console.warn('Style de carte indisponible, repli', e.error);
-    currentStyle = currentStyle === CONFIG.map.styleNight ? CONFIG.map.styleDay : OSM_RASTER_STYLE;
-    map.setStyle(currentStyle, { diff: false });
+    fallback = true;
+    map.setStyle(OSM_RASTER_STYLE, { diff: false });
   });
+  setMapStyle(mapLook, true);
 
   // Un geste de l'utilisateur détache la caméra (bouton « Recentrer »).
   for (const ev of ['dragstart', 'rotatestart', 'pitchstart', 'zoomstart']) {
@@ -63,25 +62,49 @@ export function initMap(container, { night: n, center, zoom }) {
   return map;
 }
 
-export function setMapTheme(n, force = false) {
-  const url = n ? CONFIG.map.styleNight : CONFIG.map.styleDay;
-  night = n;
-  if (!force && currentStyle === url) return;
+/** { night, satellite } : plan jour, plan nuit ou satellite, tous dérivés du même style. */
+export function setMapStyle({ night = look.night, satellite = look.satellite }, force = false) {
+  if (!force && !fallback && night === look.night && satellite === look.satellite) return;
+  look = { night, satellite };
   styleReady = false;
-  currentStyle = url;
-  map.setStyle(url, { diff: false });
+  fallback = false;
+  map.setStyle(CONFIG.map.style, {
+    diff: false,
+    transformStyle: (_, next) => (satellite ? satelliteStyle(next) : night ? nightStyle(next) : next),
+  });
 }
 /** Après un retour du réseau : retente le style vectoriel si on est sur le secours raster. */
-export const retryStyle = () => currentStyle === OSM_RASTER_STYLE && setMapTheme(night, true);
+export const retryStyle = () => fallback && setMapStyle(look, true);
 
-function addRouteLayers() {
+// Icône radar dessinée une fois (canvas → pixels), réutilisable à chaque changement de style.
+function radarImage() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.beginPath(); g.arc(32, 32, 29, 0, 2 * Math.PI);
+  g.fillStyle = '#fff'; g.fill();
+  g.lineWidth = 6; g.strokeStyle = '#E5242B'; g.stroke();
+  g.translate(14, 14); g.scale(1.5, 1.5);
+  g.fillStyle = '#111';
+  g.fill(new Path2D('M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z'));
+  g.fillStyle = '#fff';
+  g.fill(new Path2D('M12 9.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7z'));
+  return g.getImageData(0, 0, 64, 64);
+}
+
+function addOverlayLayers() {
   if (map.getSource('routes')) return;
-  const before = map.getStyle().layers.find((l) => l.type === 'symbol')?.id; // sous les libellés
+  if (!map.hasImage('radar')) map.addImage('radar', radarImage(), { pixelRatio: 2 });
+  map.addSource('radars', { type: 'geojson', data: radarsFC });
+  map.addLayer({ id: 'radars', type: 'symbol', source: 'radars', layout: { 'icon-image': 'radar', 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
+  // Au-dessus des routes, ponts et bâtiments 3D, mais sous les libellés finaux.
+  const layers = map.getStyle().layers;
+  const before = layers.slice(layers.findLastIndex((l) => l.type !== 'symbol') + 1).find((l) => l.type === 'symbol')?.id;
   const width = (a, b) => ['interpolate', ['linear'], ['zoom'], 10, a, 17, b];
   const layout = { 'line-join': 'round', 'line-cap': 'round' };
   map.addSource('routes', { type: 'geojson', data: routesFC });
   map.addLayer({ id: 'route-alt', type: 'line', source: 'routes', filter: ['==', ['get', 'active'], false], layout,
-    paint: { 'line-color': night ? '#4B5468' : '#A3ACBE', 'line-width': width(4, 10) } }, before);
+    paint: { 'line-color': look.night ? '#4B5468' : '#A3ACBE', 'line-width': width(4, 10) } }, before);
   map.addLayer({ id: 'route-casing', type: 'line', source: 'routes', filter: ['==', ['get', 'active'], true], layout,
     paint: { 'line-color': ACCENT_DARK, 'line-width': width(7, 17) } }, before);
   map.addLayer({ id: 'route-line', type: 'line', source: 'routes', filter: ['==', ['get', 'active'], true], layout,
@@ -94,6 +117,12 @@ export function setRoutes(routes, active = 0) {
     features: routes.map((r, i) => ({ type: 'Feature', properties: { i, active: i === active }, geometry: { type: 'LineString', coordinates: r.coords } })),
   };
   map.getSource('routes')?.setData(routesFC);
+}
+
+/** Radars à afficher : [{ lon, lat }]. */
+export function setRadars(list = []) {
+  radarsFC = { type: 'FeatureCollection', features: list.map((r) => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [r.lon, r.lat] } })) };
+  map.getSource('radars')?.setData(radarsFC);
 }
 
 export function fitRoutes(routes, bottomPx) {
@@ -166,8 +195,8 @@ function tick(now) {
       const z = map.getZoom(), pitch = map.getPitch();
       o.bearing = b;
       o.zoom = z + (cam.zoom - z) * 0.05;
-      o.pitch = pitch + (NAV_PITCH - pitch) * 0.08;
-      settling = Math.abs(cam.zoom - z) > 0.01 || Math.abs(NAV_PITCH - pitch) > 0.2;
+      o.pitch = pitch + (cam.pitch - pitch) * 0.08;
+      settling = Math.abs(cam.zoom - z) > 0.01 || Math.abs(cam.pitch - pitch) > 0.2;
     }
     map.jumpTo(o);
   }
@@ -187,7 +216,7 @@ export const hasPosition = () => !!cam.to;
 export function recenter() {
   if (!cam.to) return false;
   const o = { center: cam.to, duration: 800 };
-  if (cam.nav) Object.assign(o, { bearing: cam.bTo, pitch: NAV_PITCH, zoom: cam.zoom, padding: navPadding() });
+  if (cam.nav) Object.assign(o, { bearing: cam.bTo, pitch: cam.pitch, zoom: cam.zoom, padding: navPadding() });
   else o.zoom = Math.max(map.getZoom(), 15.5);
   cam.gesture = false;
   map.easeTo(o);
@@ -200,6 +229,12 @@ function navPadding() {
   return w > h && w >= 640
     ? { top: h * 0.3, bottom: 0, left: Math.min(420, w * 0.45), right: 0 } // paysage : panneau à gauche
     : { top: h * 0.42, bottom: 0, left: 0, right: 0 }; // portrait : position dans le tiers bas
+}
+
+/** Vue de navigation : 3D inclinée ou 2D à plat (toujours orientée dans le sens de la marche). */
+export function setNavView(is3d) {
+  cam.pitch = is3d ? 55 : 0;
+  if (cam.follow && !raf && cam.to) raf = requestAnimationFrame(tick);
 }
 
 export function setNavMode(v) {

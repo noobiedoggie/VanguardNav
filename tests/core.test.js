@@ -106,3 +106,73 @@ test('guidage après recalcul : pas de consigne de départ répétée', () => {
   const g = new Guidance(route(), { silentStart: true });
   assert.equal(g.update({ lon: 2.35, lat: 48.85, accuracy: 5, speed: 14 }).speech, null);
 });
+
+// ── Styles de carte ────────────────────────────────────────
+import { parseColor, nightStyle, satelliteStyle } from '../src/styles.js';
+import { radarsOnRoute } from '../src/radars.js';
+
+const MINI = {
+  version: 8,
+  sources: { openmaptiles: { type: 'vector' } },
+  layers: [
+    { id: 'background', type: 'background', paint: { 'background-color': '#f8f4f0' } },
+    { id: 'water', type: 'fill', paint: { 'fill-color': 'rgb(158,189,255)' } },
+    { id: 'road_minor_casing', type: 'line', paint: { 'line-color': '#cfcdca' } },
+    { id: 'road_minor', type: 'line', paint: { 'line-color': '#fff' } },
+    { id: 'road_motorway', type: 'line', paint: { 'line-color': ['interpolate', ['linear'], ['zoom'], 5, 'hsl(26,87%,62%)', 6, '#fc8'] } },
+    { id: 'label_city', type: 'symbol', layout: { 'text-field': '{name}' }, paint: { 'text-color': '#000', 'text-halo-color': '#fff' } },
+  ],
+};
+const L = (c) => parseColor(c)[2];
+
+test('couleurs : formats hex, rgb, hsla', () => {
+  assert.deepEqual(parseColor('#fff'), [0, 0, 1, 1]);
+  assert.equal(parseColor('hsla(35,57%,88%,0.49)')[3], 0.49);
+  near(parseColor('rgb(158,189,255)')[0], 221, 1);
+  assert.equal(parseColor('{name}'), null);
+});
+
+test('plan nuit : fond sombre, routes visibles, textes clairs', () => {
+  const n = nightStyle(MINI), p = (id) => n.layers.find((l) => l.id === id).paint;
+  const bg = L(p('background')['background-color']);
+  assert.ok(bg < 0.2);
+  assert.ok(L(p('road_minor')['line-color']) > bg + 0.2, 'route plus claire que le fond');
+  assert.ok(L(p('road_minor_casing')['line-color']) < L(p('road_minor')['line-color']), 'bordure plus sombre que la route');
+  assert.ok(L(p('road_motorway')['line-color'][6]) > bg + 0.15, 'expressions transformées aussi');
+  assert.ok(L(p('label_city')['text-color']) > 0.85);
+  assert.ok(L(p('label_city')['text-halo-color']) < 0.15);
+  assert.equal(MINI.layers[0].paint['background-color'], '#f8f4f0', 'style d’origine intact');
+});
+
+test('satellite : imagerie + routes + noms, sans aplats', () => {
+  const s = satelliteStyle(MINI), ids = s.layers.map((l) => l.id);
+  assert.deepEqual(ids, ['background', 'satellite', 'road_minor', 'road_motorway', 'label_city']);
+  assert.equal(s.sources.satellite.type, 'raster');
+});
+
+test('radars : seuls ceux sur la route sont gardés, dans l’ordre du trajet', () => {
+  const r = route();
+  const nodes = [
+    { lon: coords[13][0], lat: coords[13][1] + 0.00005, maxspeed: 50 }, // sur Rue B, ~6 m
+    { lon: coords[4][0] + 0.00008, lat: coords[4][1], maxspeed: 90 }, // sur Rue A, ~6 m
+    { lon: coords[4][0] + 0.002, lat: coords[4][1], maxspeed: 70 }, // à ~150 m : ignoré
+  ];
+  const found = radarsOnRoute(r, nodes);
+  assert.deepEqual(found.map((x) => x.maxspeed), [90, 50]);
+  near(found[0].along, 400, 5);
+});
+
+test('guidage : alerte radar annoncée une fois, avec la limite', () => {
+  const r = route();
+  r.radars = [{ lon: 2.35, lat: 48.85 + 5 * LAT, maxspeed: 50, along: 500 }];
+  const g = new Guidance(r, { silentStart: true });
+  const at = (m) => g.update({ lon: 2.35, lat: 48.85 + (m / 100) * LAT, accuracy: 5, speed: 14 });
+  assert.equal(at(0).radar, null);
+  const a = at(150); // radar à 350 m (seuil 300 m à 50 km/h, visible dès 375 m)
+  assert.equal(a.radar.maxspeed, 50);
+  assert.equal(a.speech, null);
+  const b = at(220);
+  assert.equal(b.speech, 'Radar dans 300 mètres, limité à 50.');
+  assert.equal(at(260).speech, null);
+  assert.equal(at(530).radar, null, 'radar dépassé');
+});

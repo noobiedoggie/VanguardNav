@@ -10,12 +10,12 @@ export class AppError extends Error {
 }
 
 /** fetch avec délai maximum ; transforme les pannes réseau en AppError lisibles. */
-export async function fetchJson(url, { timeoutMs = 12000, signal } = {}) {
+export async function fetchJson(url, { timeoutMs = 12000, signal, method = 'GET', body } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort('timeout'), timeoutMs);
   signal?.addEventListener('abort', () => ctrl.abort('cancel'));
   try {
-    const res = await fetch(url, { signal: ctrl.signal });
+    const res = await fetch(url, { signal: ctrl.signal, method, body });
     const json = await res.json().catch(() => null);
     return { ok: res.ok, status: res.status, json };
   } catch (e) {

@@ -1,6 +1,6 @@
 # Vanguard Navigator
 
-Navigation GPS Android minimaliste : carte OpenStreetMap, recherche d’adresses, jusqu’à 3 itinéraires, guidage vocal en français, recalcul automatique, mode nuit. Aucune clé API, aucun service payant.
+Navigation GPS Android minimaliste : carte plan (jour/nuit) ou satellite, recherche d’adresses, jusqu’à 3 itinéraires, guidage vocal en français, vue 3D ou 2D, alertes radars, recalcul automatique. Aucune clé API, aucun service payant.
 
 ## 1. Pousser le code
 
@@ -47,7 +47,9 @@ Tous réglables en haut de [`src/config.js`](src/config.js) :
 
 | Rôle | Service |
 |---|---|
-| Carte | MapLibre GL JS + tuiles OpenStreetMap (OpenFreeMap, secours : tile.openstreetmap.org) |
+| Carte plan | MapLibre GL JS + tuiles OpenStreetMap (OpenFreeMap « Liberty », version nuit dérivée ; secours : tile.openstreetmap.org) |
+| Satellite | Esri World Imagery |
+| Radars | Radars fixes OpenStreetMap (`highway=speed_camera`) via l’API Overpass |
 | Recherche | Photon (komoot) |
 | Itinéraires | Valhalla (FOSSGIS) — 1 requête/s max |
 
@@ -58,6 +60,8 @@ src/config.js     URLs des services et seuils de guidage
 src/map.js        carte, couches d’itinéraire, caméra de navigation
 src/search.js     recherche et géocodage inverse
 src/routing.js    appel Valhalla, analyse des trajets
+src/radars.js     radars le long de l’itinéraire (Overpass)
+src/styles.js     variantes nuit et satellite du style de carte
 src/guidance.js   moteur de guidage (annonces, sortie de route, arrivée) — sans DOM, testé
 src/native.js     plugins Capacitor (GPS arrière-plan, voix, écran allumé, barre de statut)
 src/main.js       logique d’écran

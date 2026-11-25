@@ -5,9 +5,12 @@
 // ─────────────────────────────────────────────────────────────
 export const CONFIG = {
   map: {
-    // Tuiles vectorielles OpenStreetMap (OpenFreeMap, sans clé).
-    styleDay: 'https://tiles.openfreemap.org/styles/liberty',
-    styleNight: 'https://tiles.openfreemap.org/styles/dark',
+    // Tuiles vectorielles OpenStreetMap (OpenFreeMap, sans clé). La version nuit
+    // et la vue satellite sont dérivées de ce style (voir styles.js).
+    style: 'https://tiles.openfreemap.org/styles/liberty',
+    // Imagerie satellite Esri World Imagery (sans clé, attribution obligatoire).
+    satelliteTiles: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    satelliteAttribution: 'Imagerie © Esri, Maxar, Earthstar Geographics',
     defaultCenter: [2.3522, 48.8566], // avant le premier fix GPS
     defaultZoom: 12,
   },
@@ -32,6 +35,11 @@ export const CONFIG = {
     offRouteFixes: 3, // nombre de positions consécutives hors route avant recalcul
     rerouteCooldownMs: 8000,
     arrivalMeters: 30,
+  },
+  radars: {
+    // Radars fixes cartographiés dans OpenStreetMap (highway=speed_camera), via l'API Overpass.
+    url: 'https://overpass-api.de/api/interpreter',
+    maxDistance: 25, // m : au-delà, le radar n'est pas sur notre route
   },
   voiceLang: 'fr-FR',
 };

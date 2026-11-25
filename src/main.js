@@ -5,6 +5,7 @@ import { settings, saveSettings, places, savePlaces, addRecent } from './storage
 import * as map from './map.js';
 import { searchPlaces, reverseGeocode } from './search.js';
 import { fetchRoutes } from './routing.js';
+import { loadRadars } from './radars.js';
 import { Guidance } from './guidance.js';
 import { isNight, haversine } from './geo.js';
 import { fmtDistance, fmtDuration, fmtClock, fmtSpeed, speedUnit } from './format.js';
@@ -51,7 +52,7 @@ function applyTheme() {
   state.night = night;
   document.documentElement.dataset.theme = night ? 'dark' : 'light';
   native.setStatusBar(night, night ? '#161C2C' : '#FFFFFF');
-  if (map.getMap()) map.setMapTheme(night);
+  if (map.getMap()) map.setMapStyle({ night });
 }
 
 // ── Démarrage ───────────────────────────────────────────────
@@ -59,12 +60,14 @@ applyTheme();
 const last = places.lastPos;
 map.initMap('map', {
   night: state.night,
+  satellite: settings.mapType === 'satellite',
   center: last ? [last.lon, last.lat] : CONFIG.map.defaultCenter,
   zoom: last ? 15 : CONFIG.map.defaultZoom,
 });
 map.getMap().once('load', native.hideSplash);
 setTimeout(native.hideSplash, 3000); // hors-ligne, « load » peut ne jamais arriver
 map.bindCompass($('#btn-compass'));
+map.setNavView(settings.navView === '3d');
 const sheet = initSheet($('#sheet'));
 setInterval(applyTheme, 60000);
 
@@ -322,6 +325,7 @@ function clearTrip() {
   state.trip = null;
   state.pendingRoute = false;
   map.setRoutes([]);
+  map.setRadars([]);
   map.setOrigin(null);
   map.setDestination(null);
 }
@@ -357,6 +361,10 @@ async function computeRoutes() {
     map.setRoutes(routes, 0);
     renderRoutes();
     map.fitRoutes(routes, sheet.height());
+    if (settings.radars)
+      loadRadars(routes)
+        .then(() => state.trip === trip && !state.nav && (renderRoutes(), map.setRadars(trip.routes[trip.active].radars)))
+        .catch((e) => console.warn('Radars indisponibles', e)); // l'aperçu reste utilisable
   } catch (e) {
     if (e.kind === 'cancel' || state.trip !== trip) return;
     trip.routes = [];
@@ -377,7 +385,7 @@ function renderRouteState(message, loading, retry = false) {
   $('#route-list').replaceChildren(box);
 }
 
-const tags = (r) => [r.hasToll && 'Péages', r.hasFerry && 'Ferry'].filter(Boolean);
+const tags = (r) => [r.hasToll && 'Péages', r.hasFerry && 'Ferry', r.radars?.length && `${r.radars.length} radar${r.radars.length > 1 ? 's' : ''}`].filter(Boolean);
 const eta = (sec) => fmtClock(new Date(Date.now() + sec * 1000));
 
 function renderRoutes() {
@@ -404,6 +412,7 @@ function selectRoute(i) {
   if (!state.trip?.routes[i]) return;
   state.trip.active = i;
   map.setRoutes(state.trip.routes, i);
+  map.setRadars(state.trip.routes[i].radars);
   renderRoutes();
 }
 map.on('routetap', (i) => !state.nav && selectRoute(i));
@@ -448,6 +457,7 @@ async function startNavigation() {
   state.nav = { guidance: new Guidance(route, { units: settings.units }), dest: trip.to, rerouting: false, lastReroute: 0 };
   map.setRoutes([route], 0);
   map.setOrigin(null);
+  if (settings.radars && !route.radars) refreshRadars(route); // l'aperçu n'a pas pu les charger
   document.body.classList.add('navigating');
   $('#sheet').classList.add('hidden-down');
   $('.top-right').hidden = true;
@@ -471,8 +481,28 @@ function navFix(fix) {
   if (st.offRoute) reroute(fix);
 }
 
+/** Radars de l'itinéraire suivi (démarrage, recalcul) : en arrière-plan, sans bloquer le guidage. */
+async function refreshRadars(route) {
+  const nav = state.nav;
+  try {
+    await loadRadars([route]);
+    if (state.nav === nav && nav?.guidance.route === route) map.setRadars(route.radars);
+  } catch {
+    if (state.nav === nav) toast('Radars indisponibles pour ce trajet (réseau).');
+  }
+}
+
 function renderNav(st, fix) {
   const nav = state.nav;
+  const radar = $('#nav-radar');
+  radar.hidden = !st.radar;
+  if (st.radar) {
+    setText($('#radar-dist'), fmtDistance(st.radar.distance, settings.units));
+    $('#radar-limit').hidden = !st.radar.maxspeed;
+    setText($('#radar-limit'), String(st.radar.maxspeed || ''));
+  }
+  const kmh = (fix.speed || 0) * 3.6;
+  $('#nav-speed').classList.toggle('over', !!st.radar?.maxspeed && kmh > st.radar.maxspeed + 2);
   if (!nav.rerouting) {
     const { id, flip } = maneuverIcon(st.maneuver.type);
     const arrow = $('#nav-arrow'), use = arrow.firstElementChild;
@@ -501,6 +531,8 @@ async function reroute(fix) {
     if (state.nav !== nav) return;
     nav.guidance.setRoute(route, true);
     map.setRoutes([route], 0);
+    map.setRadars([]);
+    if (settings.radars) refreshRadars(route);
     native.speak('Itinéraire recalculé.');
   } catch (e) {
     if (state.nav === nav) toast(e.kind === 'offline' ? 'Hors itinéraire et sans connexion. Nouvel essai dans quelques secondes.' : errText(e));
@@ -536,6 +568,20 @@ function syncMute() {
   b.firstElementChild.firstElementChild.setAttribute('href', settings.voice ? '#i-sound' : '#i-mute');
   b.setAttribute('aria-label', settings.voice ? 'Couper le guidage vocal' : 'Réactiver le guidage vocal');
 }
+function syncView() {
+  map.setNavView(settings.navView === '3d');
+  setText($('#btn-view'), settings.navView === '3d' ? '2D' : '3D'); // le bouton propose l'autre vue
+}
+$('#btn-view').onclick = () => {
+  settings.navView = settings.navView === '3d' ? '2d' : '3d';
+  onSettingChanged('navView');
+};
+$('#btn-layers').onclick = () => {
+  settings.mapType = settings.mapType === 'satellite' ? 'plan' : 'satellite';
+  onSettingChanged('mapType');
+  toast(settings.mapType === 'satellite' ? 'Vue satellite' : 'Vue plan', { duration: 1500 });
+};
+
 $('#btn-mute').onclick = () => {
   settings.voice = !settings.voice;
   saveSettings();
@@ -557,6 +603,15 @@ function onSettingChanged(key) {
   syncControls();
   syncMute();
   if (key === 'theme') applyTheme();
+  if (key === 'mapType') map.setMapStyle({ satellite: settings.mapType === 'satellite' });
+  if (key === 'navView') syncView();
+  if (key === 'radars') {
+    const route = state.nav ? state.nav.guidance.route : state.trip?.routes[state.trip.active];
+    if (!settings.radars) {
+      for (const r of [route, ...(state.trip?.routes || [])]) if (r) r.radars = [];
+      map.setRadars([]);
+    } else if (route) state.nav ? refreshRadars(route) : computeRoutes();
+  }
   if (key === 'units' && state.trip?.routes.length) renderRoutes();
   if (key === 'units' && state.nav) state.nav.guidance.units = settings.units;
   if (key.startsWith('avoid') && state.trip && !state.nav) computeRoutes();
@@ -611,4 +666,5 @@ native.onResume(() => {
 });
 
 syncControls();
+syncView();
 initLocation();

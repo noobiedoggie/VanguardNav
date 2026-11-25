@@ -17,6 +17,9 @@ function save(key, value) {
 export const settings = load('vn.settings', {
   units: 'km', // 'km' | 'mi'
   theme: 'auto', // 'auto' | 'day' | 'night'
+  mapType: 'plan', // 'plan' | 'satellite'
+  navView: '3d', // '3d' | '2d'
+  radars: true,
   voice: true,
   voiceURI: '', // '' = voix par défaut du téléphone
   avoidHighways: false,

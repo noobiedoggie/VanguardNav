@@ -20,6 +20,8 @@ export class Guidance {
     this.offCount = 0;
     this.spoken = new Set(silentStart ? ['start'] : []);
     this.arrived = false;
+    this.radarIdx = 0;
+    this.radarsAlerted = new Set();
   }
 
   /** fix : { lon, lat, accuracy, speed } → état complet pour l'affichage. */
@@ -50,7 +52,8 @@ export class Guidance {
     for (let i = this.next; i < M.length; i++) remainingTime += M[i].time;
 
     const arrived = onRoute && isDestination(nm) && distToNext <= CONFIG.nav.arrivalMeters;
-    const speech = this.#speech(onRoute, arrived, nm, distToNext, fix.speed);
+    const radar = onRoute ? this.#radar(along, fix.speed) : null;
+    const speech = [this.#speech(onRoute, arrived, nm, distToNext, fix.speed), radar?.speech].filter(Boolean).join(' ') || null;
     if (arrived) this.arrived = true;
 
     const segEnd = r.coords[Math.min(s.seg + 1, r.coords.length - 1)];
@@ -65,7 +68,27 @@ export class Guidance {
       remainingTime,
       arrived,
       speech,
+      radar: radar?.visible ? { distance: radar.distance, maxspeed: radar.maxspeed } : null,
     };
+  }
+
+  /** Prochain radar sur l'itinéraire : visible à l'approche, annoncé une seule fois. */
+  #radar(along, speed) {
+    const list = this.route.radars;
+    if (!list?.length) return null;
+    while (this.radarIdx < list.length && list[this.radarIdx].along < along - 15) this.radarIdx++;
+    const r = list[this.radarIdx];
+    if (!r) return null;
+    const v = Math.max(speed || 0, 8);
+    const alertAt = v > 25 ? 800 : v > 14 ? 500 : 300;
+    const distance = Math.max(0, r.along - along);
+    let speech = null;
+    if (distance <= alertAt && !this.radarsAlerted.has(this.radarIdx)) {
+      // Radars groupés (deux sens, double cabine) : une seule annonce.
+      for (let i = this.radarIdx; i < list.length && list[i].along - r.along < 150; i++) this.radarsAlerted.add(i);
+      speech = `Radar dans ${speakDistance(distance, this.units)}${r.maxspeed ? `, limité à ${r.maxspeed}` : ''}.`;
+    }
+    return { visible: distance <= alertAt * 1.25, distance, maxspeed: r.maxspeed, speech };
   }
 
   #speech(onRoute, arrived, nm, d, speed) {

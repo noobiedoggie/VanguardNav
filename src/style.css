@@ -185,8 +185,9 @@ body.navigating .maplibregl-ctrl-top-left { top: auto; bottom: 150px; }
 /* ── Navigation ───────────────────────────────────────────── */
 #nav { position: fixed; inset: 0; z-index: 8; pointer-events: none; }
 #nav > * { pointer-events: auto; }
+.nav-top { position: absolute; top: calc(var(--safe-top) + 10px); left: 10px; right: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
 .nav-banner {
-  position: absolute; top: calc(var(--safe-top) + 10px); left: 10px; right: 10px;
+  align-self: stretch;
   display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-radius: var(--radius);
   background: var(--accent); color: #fff; box-shadow: var(--shadow);
 }
@@ -204,6 +205,18 @@ body.navigating .maplibregl-ctrl-top-left { top: auto; bottom: 150px; }
   display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;
 }
 .speed b { font-size: 26px; }
+.speed.over { background: var(--danger); color: #fff; }
+.speed.over small { color: #fff; }
+.nav-float-right { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+.view-toggle { font-weight: 800; font-size: 16px; }
+.radar-alert {
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 10px; border-radius: 20px;
+  background: var(--surface); box-shadow: var(--shadow); animation: view-in 0.25s var(--ease);
+}
+.radar-ic { width: 46px; height: 46px; }
+.radar-alert b { display: block; font-size: 24px; line-height: 1.1; }
+.radar-alert small { color: var(--danger); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; font-size: 12px; }
+.limit { width: 46px; height: 46px; border-radius: 50%; border: 5px solid #E5242B; background: #fff; color: #111; display: grid; place-items: center; font-weight: 800; font-size: 17px; }
 .speed small { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .btn.recenter { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
 .nav-panel {
@@ -248,7 +261,7 @@ body.navigating .maplibregl-ctrl-top-left { top: auto; bottom: 150px; }
 @media (orientation: landscape) and (min-width: 640px) {
   .sheet { left: 12px; right: auto; width: 400px; bottom: 12px; border-radius: var(--radius); max-height: calc(100vh - 24px); padding-bottom: 16px; }
   .sheet-fab { right: -72px; top: auto; bottom: 0; }
-  .nav-banner { right: auto; width: 400px; }
+  .nav-top { right: auto; width: 400px; }
   .nav-bottom { right: auto; width: 424px; }
   .nav-panel { margin: 0 0 12px 12px; border-radius: var(--radius); }
   .toast { left: 428px; right: 16px; bottom: 16px; }
@@ -259,3 +272,6 @@ body.navigating .maplibregl-ctrl-top-left { top: auto; bottom: 150px; }
 }
 .btn:disabled { opacity: 0.45; pointer-events: none; }
 body.navigating .pill { top: calc(var(--safe-top) + 130px); }
+#nav .nav-top { pointer-events: none; }
+#nav .nav-top > * { pointer-events: auto; }
+.sheet.hidden-down .sheet-fab { display: none; }
